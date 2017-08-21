@@ -8,6 +8,7 @@
 import curses
 from curses import KEY_RIGHT, KEY_LEFT, KEY_UP, KEY_DOWN
 from random import randint
+import time
 
 # Initialise cursor and window properties
 curses.initscr()
@@ -20,9 +21,22 @@ curses.curs_set(0)
 win.border(0)
 win.nodelay(1)
 
-# Escape key reference number for the computer system
-KEY_ESC = 27
+# Key constants
+KEY_ESC = 27 #Escape key reference number for the computer system
+KEY_W = 119
+KEY_A = 97
+KEY_S = 115
+KEY_D = 100
+VALID_KEYS = [KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN, KEY_ESC, KEY_W, KEY_A, KEY_S, KEY_D] #The keys that are used to control the game
+OPP_KEY = {KEY_RIGHT:KEY_LEFT, KEY_LEFT:KEY_RIGHT, KEY_UP:KEY_DOWN, KEY_DOWN:KEY_UP, KEY_W:KEY_A, KEY_A:KEY_W, KEY_S:KEY_D, KEY_D:KEY_S} #A dict of opposite keys to prevent backtracking
 
+# Constants to adjust the game difficulty
+INIT_LENGTH = 6 #Change the initial length of the snake
+INIT_SPEED = INIT_LENGTH #This also sets the initial speed of the snake
+INIT_P2 = True #Enable second snake controlled with WASD
+
+if not INIT_P2:
+    VALID_KEYS = [KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN, KEY_ESC] #The keys that are used to control the game with only 1 player
 
 ################################################################################
 # INITIALISING VALUES BEFORE THE GAME STARTS
@@ -31,12 +45,20 @@ KEY_ESC = 27
 # Initial snake co-ordinates
 # Co-ordinates are y-coordinate, then x-coordinate.
 # Snake is being placed here approximately in the middle left of our window
-snake = [[4,10], [4,9], [4,8]]
+snake = []
+for y in range(0, min(48,INIT_LENGTH)):
+	snake.append([4, 10+min(48,INIT_LENGTH)-y])
+
+if INIT_P2:
+    snake2 = []
+    for y in range(0, min(48,INIT_LENGTH)):
+	    snake2.append([6, 8+min(48,INIT_LENGTH)-y])
 
 # Initial snake direction
 # Snake will move in direction of last arrow key pressed, but initially we will
 # set this to right arrow key (so snake starts moving left to right)
 key = KEY_RIGHT
+key2 = KEY_D
 
 # First food co-ordinates (Lesson 4)
 food = [10,20]
@@ -60,7 +82,7 @@ score = 0
 # A 'while' loop will repeatedly execute until its stated condition is met, OR
 # a 'break' statement is executed inside of it. Each loop iteration will execute
 # one movement of the snake and update the game display accordingly. The
-# condition that breaks this while loop is the user pressing the Esc key. which
+# condition that breaks this while loop is the user pressing the Esc key, which
 # will end the game.
 
 while key != KEY_ESC:
@@ -79,7 +101,7 @@ while key != KEY_ESC:
 
     # Each time the score increases by 1, we will increase the speed level by 2
     # Therefore, speedSetting is double the score value:
-    speedSetting = 2 * score
+    speedSetting = 2 * INIT_SPEED + 2 * score
 
     # We want to limit the speed level to our max, which is 120
     if speedSetting > 120:
@@ -128,9 +150,11 @@ while key != KEY_ESC:
 
     # Ignore useless key selections
     # Ignore the latest key press if it is not an arrow key (or Esc key)
-    if key not in [KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN, KEY_ESC]:
+    if key not in VALID_KEYS or key == OPP_KEY[prevKey]:
         key = prevKey
-
+    elif key in [KEY_W, KEY_A, KEY_S, KEY_D]:
+        key2 = key
+        key = prevKey
 
     ###
     # CALCULATE NEW SNAKEHEAD POSITION (Lesson 2)
@@ -163,7 +187,23 @@ while key != KEY_ESC:
     # piece of fruit (Lesson 5). If we decide later on that we're not eating a
     # piece of fruit, we must remember to reduce the snake length by cutting off
     # its tail. See [1].
+    
+    #Do the same thing for the second snake if we have one.
+    if INIT_P2:
+        newY = snake2[0][0]
+        if key2 == KEY_S:
+            newY += 1
+        elif key2 == KEY_W:
+            newY -= 1
 
+        newX = snake2[0][1]
+        if key2 == KEY_D:
+            newX += 1
+        elif key2 == KEY_A:
+            newX -= 1
+
+        # Put new snakehead co-ordinates into start of snake array (position 0)
+        snake2.insert(0, [newY, newX])
 
     ###
     # IF SNAKE REACHES BORDER, MAKE IT ENTER FROM OTHER SIDE (Lesson 3)
@@ -182,17 +222,31 @@ while key != KEY_ESC:
         snake[0][0] = 1
     if snake[0][1] == 59:
         snake[0][1] = 1
+    if INIT_P2:
+        if snake2[0][0] == 0:
+            snake2[0][0] = 18
+        if snake2[0][1] == 0:
+            snake2[0][1] = 58
+        if snake2[0][0] == 19:
+            snake2[0][0] = 1
+        if snake2[0][1] == 59:
+            snake2[0][1] = 1
 
 
     ###
-    # IF SNAKE CROSSES ITSELF (Lesson 2)
+    # IF SNAKE CROSSES ITSELF OR ANOTHER SNAKE
     ###
 
     # [1:] refers to position 1 (i.e., the 2nd element in the array, as we
     # count from 0) and onwards.
     if snake[0] in snake[1:]:
         break
-
+    
+    if INIT_P2:
+        if snake2[0] in snake2[1:]:
+            break
+        if snake[0] in snake2 or snake2[0] in snake:
+            break
 
     ###
     # CHECK IF SNAKE HAS EATEN FOOD (Lessons 2 + 3)
@@ -221,6 +275,29 @@ while key != KEY_ESC:
 
         # update display where snaketail has just been removed
         win.addch(last[0], last[1], ' ')
+    
+    if INIT_P2: #Do the same thing for the other snake, if we have one
+        if snake2[0] == food:
+            # remove the previous food coordinates
+            food = []
+            # add 1 to the score
+            score += 1
+            # calculate new food position
+            while food == []:
+                food = [randint(1, 18), randint(1, 58)]
+                # reset food if it's been randomly assigned a co-ordinate that the
+                # snake is currently occupying
+                if food in snake2:
+                    food = []
+            # update display with new food
+            win.addch(food[0], food[1], '*')
+        else:
+            # [1] If snake does not eat food, remember to decrease its length
+            # remove last snake co-ordinate (its 'tail') from snake array
+            last = snake2.pop()
+
+            # update display where snaketail has just been removed
+            win.addch(last[0], last[1], ' ')
 
 
     ###
@@ -231,6 +308,10 @@ while key != KEY_ESC:
     # are (no longer) the head are drawn as body ('#')
     win.addch(snake[1][0], snake[1][1], '#')
     win.addch(snake[0][0], snake[0][1], '@')
+    
+    if INIT_P2:
+        win.addch(snake2[1][0], snake2[1][1], '£')
+        win.addch(snake2[0][0], snake2[0][1], '@')
 
 
 #### End of main game loop ###
@@ -240,12 +321,22 @@ while key != KEY_ESC:
 # END OF GAME
 ################################################################################
 
+# Show how the player lost for 3 seconds
+start_time = time.time()
+for tim in range(1,6):
+    while start_time + tim > time.time():
+        if tim % 2 == 0:
+            win.addstr(0, 27, " INS COIN ")
+        else:
+            win.addstr(0, 27, " YOU LOSE ", curses.A_STANDOUT)
+        win.refresh()
+
 # Close window
 curses.endwin()
 
 # Print out score and thank you message
 # Each print command will print its message to a new line
-print("Final score - " + str(score))
+print("Final score: " + str(score))
 print("Thank you for playing!")
 
 
